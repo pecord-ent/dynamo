@@ -7,11 +7,6 @@ trap 'echo Cleaning up...; kill 0' EXIT
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 source "$SCRIPT_DIR/../../../common/launch_utils.sh"
 
-# Upstream-based images rely on wheel-packaged NIXL/UCX assets. Constrain UCX
-# transports to the set we exercise in single-node Dynamo tests to avoid
-# shared-memory transport crashes during NIXL initialization.
-export UCX_TLS="${UCX_TLS:-tcp,cuda_copy,cuda_ipc,self}"
-
 # Default values
 MODEL_NAME="Qwen/Qwen3-VL-30B-A3B-Instruct-FP8"
 SINGLE_GPU=false
