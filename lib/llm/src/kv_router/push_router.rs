@@ -388,17 +388,15 @@ impl AsyncEngine<SingleIn<PreprocessedRequest>, ManyOut<Annotated<LLMEngineOutpu
 
         // Resolve session affinity: if the request has a session_id, inject the
         // pinned worker_id into backend_instance_id before worker selection.
-        if let Some(ref sticky) = self.sticky_sessions {
-            if request
+        if let Some(ref sticky) = self.sticky_sessions
+            && request
                 .routing
                 .as_ref()
                 .and_then(|r| r.backend_instance_id)
                 .is_none()
-            {
-                if let Some(worker_id) = sticky.resolve(&request) {
-                    request.routing_mut().backend_instance_id = Some(worker_id);
-                }
-            }
+            && let Some(worker_id) = sticky.resolve(&request)
+        {
+            request.routing_mut().backend_instance_id = Some(worker_id);
         }
 
         // Get phase from tracker (defaults to Aggregated if no tracker or phase not set)

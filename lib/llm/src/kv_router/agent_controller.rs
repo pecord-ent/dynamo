@@ -175,7 +175,11 @@ impl AgentController {
                         // session exists, otherwise retries can get pinned to a
                         // worker that never opened the session.
                         if let Some(sticky) = sticky {
-                            sticky.bind(&sc.session_id, instance_id, Duration::from_secs(sc.timeout));
+                            sticky.bind(
+                                &sc.session_id,
+                                instance_id,
+                                Duration::from_secs(sc.timeout),
+                            );
                         }
                     }
                     Err(e) => {
@@ -243,10 +247,9 @@ fn ensure_session_open_succeeded(
         ));
     }
 
-    let body = response
-        .data
-        .as_ref()
-        .ok_or_else(|| anyhow!("open_session returned no response body for session {session_id}"))?;
+    let body = response.data.as_ref().ok_or_else(|| {
+        anyhow!("open_session returned no response body for session {session_id}")
+    })?;
 
     let status = body.get("status").and_then(|value| value.as_str());
     match status {

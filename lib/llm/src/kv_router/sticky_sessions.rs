@@ -50,6 +50,12 @@ pub struct InMemoryAffinityStore {
     on_expire: Option<ExpiryHandler>,
 }
 
+impl Default for InMemoryAffinityStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl InMemoryAffinityStore {
     pub fn new() -> Self {
         Self::new_with_on_expire(None)
