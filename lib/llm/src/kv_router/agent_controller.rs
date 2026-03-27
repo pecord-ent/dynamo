@@ -15,7 +15,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use dynamo_runtime::{
     component::Component,
     pipeline::{PushRouter, RouterMode, SingleIn},
@@ -145,11 +145,6 @@ impl AgentController {
                     .timeout
                     .saturating_add(SESSION_TIMEOUT_FALLBACK_BUFFER_SECS);
 
-                // Bind affinity so subsequent turns route to this worker.
-                if let Some(sticky) = sticky {
-                    sticky.bind(&sc.session_id, instance_id, Duration::from_secs(sc.timeout));
-                }
-
                 // Open session synchronously -- the session must exist on the
                 // worker before the first generate request arrives, otherwise
                 // SGLang rejects it with "session does not exist".
@@ -162,6 +157,7 @@ impl AgentController {
                 match client.direct(SingleIn::new(request), instance_id).await {
                     Ok(mut stream) => {
                         if let Some(resp) = stream.next().await {
+                            ensure_session_open_succeeded(&resp, &sc.session_id)?;
                             tracing::info!(
                                 request_id = %context_id,
                                 worker_id = instance_id,
@@ -174,6 +170,13 @@ impl AgentController {
                         }
                         // Drain remaining stream items
                         while stream.next().await.is_some() {}
+
+                        // Bind affinity only after the worker confirms the
+                        // session exists, otherwise retries can get pinned to a
+                        // worker that never opened the session.
+                        if let Some(sticky) = sticky {
+                            sticky.bind(&sc.session_id, instance_id, Duration::from_secs(sc.timeout));
+                        }
                     }
                     Err(e) => {
                         tracing::warn!(
@@ -227,6 +230,39 @@ impl AgentController {
             })
             .await?;
         Ok(client.clone())
+    }
+}
+
+fn ensure_session_open_succeeded(
+    response: &Annotated<serde_json::Value>,
+    session_id: &str,
+) -> Result<()> {
+    if response.is_error() {
+        return Err(anyhow!(
+            "open_session returned annotated error for session {session_id}"
+        ));
+    }
+
+    let body = response
+        .data
+        .as_ref()
+        .ok_or_else(|| anyhow!("open_session returned no response body for session {session_id}"))?;
+
+    let status = body.get("status").and_then(|value| value.as_str());
+    match status {
+        Some("ok") => Ok(()),
+        Some(other) => {
+            let message = body
+                .get("message")
+                .and_then(|value| value.as_str())
+                .unwrap_or("unknown error");
+            Err(anyhow!(
+                "open_session failed for session {session_id}: status={other}, message={message}"
+            ))
+        }
+        None => Err(anyhow!(
+            "open_session returned malformed response for session {session_id}: missing status"
+        )),
     }
 }
 

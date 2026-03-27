@@ -16,6 +16,7 @@ from sglang.srt.utils.hf_transformers_utils import get_tokenizer
 from dynamo.frontend.sglang_prepost import (
     SglangPreprocessResult,
     SglangStreamingPostProcessor,
+    _normalize_prompt_token_ids,
     convert_tools,
     create_parsers,
     preprocess_chat_request,
@@ -425,6 +426,22 @@ class TestCreateParsers:
         )
         assert tcp is not None
         assert rp is not None
+
+
+class TestNormalizePromptTokenIds:
+    def test_batch_encoding_like_object_uses_input_ids(self):
+        class FakeBatchEncoding:
+            input_ids = [11, 22, 33]
+
+            def __iter__(self):
+                yield from ("input_ids", "attention_mask")
+
+        assert _normalize_prompt_token_ids(FakeBatchEncoding()) == [11, 22, 33]
+
+    def test_mapping_uses_input_ids(self):
+        assert _normalize_prompt_token_ids(
+            {"input_ids": [1, 2, 3], "attention_mask": [1, 1, 1]}
+        ) == [1, 2, 3]
 
 
 class TestRuntimeConfigParserName:
